@@ -1,0 +1,89 @@
+server:
+  port: 9090
+
+spring:
+  application:
+    name: gateway-service
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: elastic-query-service
+          uri: lb://elastic-query-service
+          predicates:
+            - Path=/elastic-query-service/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: elasticQueryCircuitBreaker
+                fallbackUri: forward:/fallback/elastic-query
+        - id: elastic-query-web-client
+          uri: lb://elastic-query-web-client
+          predicates:
+            - Path=/elastic-query-web-client/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userKeyResolver}"
+        - id: kafka-streams-service
+          uri: lb://kafka-streams-service
+          predicates:
+            - Path=/kafka-streams-service/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 50
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userKeyResolver}"
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${DISCOVERY_USERNAME:guest}:${DISCOVERY_PASSWORD:guest}@${DISCOVERY_HOST:localhost}:${DISCOVERY_PORT:8761}/eureka/
+  instance:
+    prefer-ip-address: true
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      elasticQueryCircuitBreaker:
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,gateway
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    com.microservices.demo: INFO
+    org.springframework.cloud.gateway: INFO

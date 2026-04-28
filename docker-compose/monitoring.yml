@@ -1,0 +1,104 @@
+version: '3.7'
+services:
+  prometheus:
+    image: prom/prometheus:v2.42.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - "./prometheus.yml:/etc/prometheus/prometheus.yml"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+    networks:
+      - ${GLOBAL_NETWORK:-services}
+
+  grafana:
+    image: grafana/grafana:9.4.3
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_USER:admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - "./grafana/provisioning:/etc/grafana/provisioning"
+    depends_on:
+      - prometheus
+    networks:
+      - ${GLOBAL_NETWORK:-services}
+
+  zipkin:
+    image: openzipkin/zipkin:2.24
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - ${GLOBAL_NETWORK:-services}
+
+  discovery-service:
+    image: ${GROUP_ID}/discovery.service:${SERVICE_VERSION:-latest}
+    ports:
+      - "8761:8761"
+    environment:
+      - "JAVA_OPTS=-Xms64m -Xmx128m"
+      - "DISCOVERY_USERNAME=${DISCOVERY_USERNAME:guest}"
+      - "DISCOVERY_PASSWORD=${DISCOVERY_PASSWORD:guest}"
+    networks:
+      - ${GLOBAL_NETWORK:-services}
+
+  gateway-service:
+    image: ${GROUP_ID}/gateway.service:${SERVICE_VERSION:-latest}
+    ports:
+      - "9092:9090"
+    environment:
+      - "JAVA_OPTS=-Xms128m -Xmx256m"
+      - "REDIS_HOST=redis"
+      - "REDIS_PORT=6379"
+      - "DISCOVERY_HOST=discovery-service"
+      - "DISCOVERY_PORT=8761"
+      - "DISCOVERY_USERNAME=${DISCOVERY_USERNAME:guest}"
+      - "DISCOVERY_PASSWORD=${DISCOVERY_PASSWORD:guest}"
+    depends_on:
+      - discovery-service
+      - redis
+    networks:
+      - ${GLOBAL_NETWORK:-services}
+
+  redis:
+    image: redis:7.0-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - ${GLOBAL_NETWORK:-services}
+
+  kafka-streams-service:
+    image: ${GROUP_ID}/kafka.streams.service:${SERVICE_VERSION:-latest}
+    ports:
+      - "8187:8187"
+    environment:
+      - "JAVA_OPTS=-Xms128m -Xmx256m"
+      - "KAFKA_BOOTSTRAP_SERVERS=kafka-broker-1:9092,kafka-broker-2:9092,kafka-broker-3:9092"
+      - "KAFKA_SCHEMA_REGISTRY_URL=http://schema-registry:8081"
+      - "KAFKA_TOPIC_NAME=twitter-topic"
+      - "DISCOVERY_HOST=discovery-service"
+      - "DISCOVERY_PORT=8761"
+      - "DISCOVERY_USERNAME=${DISCOVERY_USERNAME:guest}"
+      - "DISCOVERY_PASSWORD=${DISCOVERY_PASSWORD:guest}"
+    depends_on:
+      - discovery-service
+      - kafka-broker-1
+      - kafka-broker-2
+      - kafka-broker-3
+    networks:
+      - ${GLOBAL_NETWORK:-services}
+
+volumes:
+  grafana-data:
+
+networks:
+  services:
+    driver: bridge

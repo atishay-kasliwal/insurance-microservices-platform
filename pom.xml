@@ -21,6 +21,9 @@
 		<module>common-util</module>
 		<module>elastic-query-service</module>
 		<module>elastic-query-web-client</module>
+		<module>discovery-service</module>
+		<module>gateway-service</module>
+		<module>kafka-streams-service</module>
 	</modules>
 	<parent>
 		<groupId>org.springframework.boot</groupId>
