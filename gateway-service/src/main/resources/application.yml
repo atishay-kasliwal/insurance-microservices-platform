@@ -83,6 +83,15 @@ management:
       prometheus:
         enabled: true
 
+jwt:
+  secret: ${JWT_SECRET:insurancePlatformSecretKey2024ForHMACSHA512SigningAndValidation!!}
+  expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+
+gateway:
+  auth:
+    username: ${GATEWAY_AUTH_USERNAME:admin}
+    password: ${GATEWAY_AUTH_PASSWORD:admin}
+
 logging:
   level:
     com.microservices.demo: INFO
